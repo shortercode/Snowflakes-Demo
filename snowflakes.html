@@ -1,0 +1,264 @@
+<script>
+(function(){
+	window.addEventListener('load',load,false);
+}());
+
+(function() {
+    var lastTime = 0;
+    var vendors = ['webkit', 'moz'];
+    for(var x = 0; x < vendors.length && !window.requestAnimationFrame; ++x) {
+        window.requestAnimationFrame = window[vendors[x]+'RequestAnimationFrame'];
+        window.cancelAnimationFrame =
+          window[vendors[x]+'CancelAnimationFrame'] || window[vendors[x]+'CancelRequestAnimationFrame'];
+    }
+
+    if (!window.requestAnimationFrame)
+        window.requestAnimationFrame = function(callback, element) {
+            var currTime = new Date().getTime();
+            var timeToCall = Math.max(0, 16 - (currTime - lastTime));
+            var id = window.setTimeout(function() { callback(currTime + timeToCall); },
+              timeToCall);
+            lastTime = currTime + timeToCall;
+            return id;
+        };
+
+    if (!window.cancelAnimationFrame)
+        window.cancelAnimationFrame = function(id) {
+            clearTimeout(id);
+        };
+}());
+
+function load(){
+
+	function resize(){
+		if(resizetimer){
+			clearTimeout(resizetimer);
+			resizetimer = null;
+		}
+		resizetimer = setTimeout( __resize , 500 );
+	};
+	function __resize(){
+		resizetimer = null;
+		screen.canvas.width 	= width;
+		screen.canvas.height 	= height;
+		buffer.canvas.width 	= width;
+		buffer.canvas.height 	= height;
+		console.log('RESIZE');
+	};
+	function draw(){
+		camera.r = camera.r >= 360 ? 0 :camera.r + 0.5;
+		textures.landscape.dirty = true;
+		if(textures.screen.texture){
+			buffer.fillStyle = textures.screen.texture;
+			buffer.fillRect(0,0,width,height);
+		}
+		if(textures.sky.texture){
+			buffer.fillStyle = textures.sky.texture;
+			buffer.fillRect(0,0,width,height);
+		}
+		if(textures.landscape.texture){
+			textures.landscape.generate();
+			//textures.landscape.generate();
+			buffer.drawImage(textures.landscape.texture,0,0,width,height);
+		}
+		screen.drawImage(buffer.canvas,0,0,width,height);
+		requestAnimationFrame(draw);
+	};
+	
+	function drawSnow(vue,ctx){
+		var arr = textures.snow;
+		var o = Array(arr.length),
+			x, //alias for array val
+			y, //alias for array val
+			z, //alias for array val
+			d, // z post rotate
+			r = vue.r * (Math.PI/180), // rot in degress
+			c = Math.cos(r), //store calculated vals
+			s = Math.sin(r), //store calculated vals
+			i = arr.length; //loop counter
+			ctx.fillStyle = 'rgba(230,230,230,0.8)';
+		while(i--){	
+		
+			arr[i][1] -= Math.random(); //fall, wind?
+			if(arr[i][1] <0)arr[i] = makeSnow(); // create a replacement
+			
+			x = arr[i][0];
+			y = arr[i][1];
+			z = arr[i][2];
+			
+			d = x * s + z * c - vue.z;
+			
+			x = ((x * c - z * s - vue.x)	/d) * 512 + 512;	// x/z
+			y = ((y - vue.y)				/d) * 256 + 256;	// y/z
+			ctx.fillRect(x,y,2,2);
+		}
+	}		
+	
+	function makeSnow(){
+		var R = Math.random;
+		return[
+			(R() * 200) - 100,
+			(R() * 150) + 130,
+			(R() * 200) - 100
+		];	
+	};
+	
+	function fillMesh(arr,vue,col,ctx){
+		var o = Array(arr.length),
+			x, //alias for array val
+			y, //alias for array val
+			z, //alias for array val
+			d, // z post rotate
+			r = vue.r * (Math.PI/180), // rot in degress
+			c = Math.cos(r), //store calculated vals
+			s = Math.sin(r), //store calculated vals
+			i = arr.length; //loop counter
+		while(i--){	
+			x = arr[i][0];
+			y = arr[i][1];
+			z = arr[i][2];
+			
+			d = x * s + z * c - vue.z;
+			o[i] = [
+				((x * c - z * s - vue.x)	/d) * 512 + 512,	// x/z
+				((y - vue.y)				/d) * 256 + 256		// y/z
+			];
+		}	
+		i = o.length - 1;
+		ctx.beginPath();
+		ctx.moveTo(o[i][0],o[i][1]);
+		while(i--)ctx.lineTo(o[i][0],o[i][1]);
+		ctx.closePath();
+		ctx.fillStyle = col;
+		ctx.fill();
+	}
+	
+	var width 	= window.innerWidth;
+	var height	= window.innerHeight;
+	var screen 	= document.createElement('canvas').getContext('2d');
+	var buffer	= document.createElement('canvas').getContext('2d'); 
+	var body 	= document.getElementsByTagName('body')[0];
+	var resizetimer 	= null;
+	window.camera = {
+		x:0,
+		y:100,
+		z:250,
+		r:160
+	};
+	window.main = {
+		screen:	screen,
+		buffer:	buffer,
+		draw:	draw,
+		resize:	resize
+	};
+	window.textures = {
+		screen:	null,
+		sky: null,
+		landscape: null
+	};
+	
+	textures.screen = (function(url,ctx){
+		var image = new Image();
+		var self = {
+			texture: null
+		}
+		image.onload = function(){
+			self.texture = ctx.createPattern(image,'repeat');
+		};
+		image.src = url;
+		return self;
+	}('wcpaper.jpg', buffer));
+	textures.sky = (function(ctx){
+		var self = {
+			texture: null
+		}
+		self.texture = ctx.createLinearGradient(0,0,0,512);
+		self.texture.addColorStop(0,"rgba(0,0,200,0.5)");
+		self.texture.addColorStop(1,"rgba(0,0,50,0.8)");
+		return self;
+	}(buffer));
+	textures.snow = (function(){
+		var i = 2000;
+		var a = Array(i)
+		while(i--)
+			a[i] = makeSnow();
+		return a;
+	}());
+	textures.landscape = (function(cam,ctx){
+		var self = {
+			texture:null,
+			dirty:true,
+			generate:generate
+		}
+		var texture = document.createElement('canvas');
+		texture.width = 1024;
+		texture.height = 512;
+		self.texture = texture;
+		var context = texture.getContext('2d');
+		
+		var T = (2 * Math.PI)/30;
+		var ground = [];
+		var N = 0;
+		while( N < 2*Math.PI){
+			ground.push([
+				100 * Math.cos(N),
+				0,
+				100 * Math.sin(N)
+			]);
+			N += T;
+		}
+		var treestumpA = [
+			[40,0,-35],
+			[35,100,-35],
+			[28,0,-35]
+		];
+		var treestumpB = [
+			[35,0,-40],
+			[35,100,-35],
+			[35,0,-28]
+		];
+		var treeA = [
+			[20,15,-20],
+			[35,100,-35],
+			[50,15,-20]
+		];
+		var treeB = [
+			[50,15,-20],
+			[35,100,-35],
+			[35,15,-50]
+		];
+		var treeC = [
+			[35,15,-50],
+			[35,100,-35],
+			[20,15,-20]
+		];
+		
+		function generate(){
+			if(!self.dirty)return;
+			context.clearRect(0,0,1024,512);
+			fillMesh(ground,cam,'rgba(240,240,240,0.9)',context);
+			fillMesh(treestumpA,cam,'rgba(70,70,40,0.9)',context);
+			fillMesh(treestumpB,cam,'rgba(70,70,40,0.9)',context);
+			fillMesh(treeA,cam,'rgba(70,140,40,0.7)',context);
+			fillMesh(treeB,cam,'rgba(70,140,40,0.7)',context);
+			fillMesh(treeC,cam,'rgba(70,140,40,0.7)',context);
+			drawSnow(cam,context);
+			//do
+			self.dirty = false;
+		}
+		generate();
+		return self;
+	}(camera));
+	__resize();
+	screen.canvas.style.height = '100%';
+	screen.canvas.style.width	= '100%';
+	body.style.margin = '0';
+	body.style.padding = '0';
+	body.appendChild(screen.canvas);
+	
+	window.addEventListener('resize',resize,false);
+	requestAnimationFrame(draw);
+};
+
+
+</script>
